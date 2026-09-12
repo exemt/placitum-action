@@ -29,12 +29,12 @@ import (
 	"github.com/exemt/placitum-action/internal/audit"
 	"github.com/exemt/placitum-action/internal/body"
 	"github.com/exemt/placitum-action/internal/config"
-	"github.com/exemt/placitum-action/internal/dataset"
 	"github.com/exemt/placitum-action/internal/livelist"
-	"github.com/exemt/placitum-shared/netinfo"
 	"github.com/exemt/placitum-action/internal/policy"
 	"github.com/exemt/placitum-action/internal/protocol"
 	"github.com/exemt/placitum-action/internal/queue"
+	"github.com/exemt/placitum-shared/dataset"
+	"github.com/exemt/placitum-shared/netinfo"
 )
 
 const (

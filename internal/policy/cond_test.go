@@ -86,16 +86,16 @@ func (f *fakeSets) ContainsAddr(name string, ip netip.Addr) (bool, bool) {
 
 func TestParseOperand(t *testing.T) {
 	for raw, want := range map[string]Operand{
-		"$uri":                        {Kind: OperandField, Name: "uri"},
-		"$remote_addr":                {Kind: OperandField, Name: "remote_addr"},
-		"$http_X_Api_Key":             {Kind: OperandHeader, Name: "x_api_key"},
-		"$http_user_agent":            {Kind: OperandHeader, Name: "user_agent"},
-		"$cookie_sid":                 {Kind: OperandCookie, Name: "sid"},
-		"$arg_token":                  {Kind: OperandArg, Name: "token"},
-		"$waf_request_headers.X-Ja3":  {Kind: OperandHeaders, Name: "x-ja3"},
+		"$uri":                         {Kind: OperandField, Name: "uri"},
+		"$remote_addr":                 {Kind: OperandField, Name: "remote_addr"},
+		"$http_X_Api_Key":              {Kind: OperandHeader, Name: "x_api_key"},
+		"$http_user_agent":             {Kind: OperandHeader, Name: "user_agent"},
+		"$cookie_sid":                  {Kind: OperandCookie, Name: "sid"},
+		"$arg_token":                   {Kind: OperandArg, Name: "token"},
+		"$waf_request_headers.X-Ja3":   {Kind: OperandHeaders, Name: "x-ja3"},
 		"$waf_request_cookies.sess.id": {Kind: OperandCookies, Name: "sess.id"},
-		"$waf_request_args.*":         {Kind: OperandArgs, All: true},
-		"$waf_var.ja3":                {Kind: OperandVar, Name: "ja3"},
+		"$waf_request_args.*":          {Kind: OperandArgs, All: true},
+		"$waf_var.ja3":                 {Kind: OperandVar, Name: "ja3"},
 	} {
 		got, err := ParseOperand(raw)
 		if err != nil {
@@ -296,9 +296,9 @@ rules:
 
 func TestClauseSemantics(t *testing.T) {
 	sets := &fakeSets{sets: map[string][]string{
-		"bad":     {"evil"},
-		"nets":    {"10.0.0.0/8", "192.168.1.7"},
-		"hashed":  {md5hex("secret")},
+		"bad":    {"evil"},
+		"nets":   {"10.0.0.0/8", "192.168.1.7"},
+		"hashed": {md5hex("secret")},
 	}}
 
 	src := &fakeSource{
@@ -313,24 +313,24 @@ func TestClauseSemantics(t *testing.T) {
 		clause string
 		want   bool
 	}{
-		"eq field":                 {`{ value: $request_method, op: eq, text: POST }`, true},
-		"ne field":                 {`{ value: $request_method, op: ne, text: GET }`, true},
-		"eq header nginx name":     {`{ value: $http_user_agent, op: eq, text: curl }`, true},
-		"header selector":          {`{ value: $waf_request_headers.x-ja3, op: eq, text: abc }`, true},
-		"var":                      {`{ value: $waf_var.ja3, op: eq, text: abc }`, true},
-		"var missing":              {`{ value: $waf_var.nope, op: ne, text: abc }`, true},
-		"cookie first only":        {`{ value: $cookie_sid, op: in, dataset: bad }`, false},
-		"cookies all values":       {`{ value: $waf_request_cookies.sid, op: in, dataset: bad }`, true},
-		"cookies all not in":       {`{ value: $waf_request_cookies.sid, op: not_in, dataset: bad }`, false},
-		"args star":                {`{ value: $waf_request_args.*, op: in, dataset: bad }`, true},
-		"arg first":                {`{ value: $arg_q, op: eq, text: "1" }`, true},
-		"arg missing not in":       {`{ value: $arg_nope, op: not_in, dataset: bad }`, true},
-		"arg missing in":           {`{ value: $arg_nope, op: in, dataset: bad }`, false},
-		"addr in prefix":           {`{ value: $remote_addr, op: in, dataset: nets, type: cidr }`, true},
-		"addr not in":              {`{ value: $remote_addr, op: not_in, dataset: nets, type: cidr }`, false},
-		"md5 set":                  {`{ value: $arg_token, op: in, dataset: hashed, hash: md5 }`, true},
-		"md5 set raw miss":         {`{ value: $arg_token, op: in, dataset: hashed }`, false},
-		"unknown set is empty":     {`{ value: $uri, op: not_in, dataset: nope }`, true},
+		"eq field":             {`{ value: $request_method, op: eq, text: POST }`, true},
+		"ne field":             {`{ value: $request_method, op: ne, text: GET }`, true},
+		"eq header nginx name": {`{ value: $http_user_agent, op: eq, text: curl }`, true},
+		"header selector":      {`{ value: $waf_request_headers.x-ja3, op: eq, text: abc }`, true},
+		"var":                  {`{ value: $waf_var.ja3, op: eq, text: abc }`, true},
+		"var missing":          {`{ value: $waf_var.nope, op: ne, text: abc }`, true},
+		"cookie first only":    {`{ value: $cookie_sid, op: in, dataset: bad }`, false},
+		"cookies all values":   {`{ value: $waf_request_cookies.sid, op: in, dataset: bad }`, true},
+		"cookies all not in":   {`{ value: $waf_request_cookies.sid, op: not_in, dataset: bad }`, false},
+		"args star":            {`{ value: $waf_request_args.*, op: in, dataset: bad }`, true},
+		"arg first":            {`{ value: $arg_q, op: eq, text: "1" }`, true},
+		"arg missing not in":   {`{ value: $arg_nope, op: not_in, dataset: bad }`, true},
+		"arg missing in":       {`{ value: $arg_nope, op: in, dataset: bad }`, false},
+		"addr in prefix":       {`{ value: $remote_addr, op: in, dataset: nets, type: cidr }`, true},
+		"addr not in":          {`{ value: $remote_addr, op: not_in, dataset: nets, type: cidr }`, false},
+		"md5 set":              {`{ value: $arg_token, op: in, dataset: hashed, hash: md5 }`, true},
+		"md5 set raw miss":     {`{ value: $arg_token, op: in, dataset: hashed }`, false},
+		"unknown set is empty": {`{ value: $uri, op: not_in, dataset: nope }`, true},
 	} {
 		p, ev := evalProfile(t, `
 conditions: [ { name: c, all: [ `+tc.clause+` ] } ]

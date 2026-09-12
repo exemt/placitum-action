@@ -26,15 +26,15 @@ import (
 	"github.com/exemt/placitum-action/internal/audit"
 	"github.com/exemt/placitum-action/internal/body"
 	"github.com/exemt/placitum-action/internal/config"
-	"github.com/exemt/placitum-action/internal/dataset"
 	"github.com/exemt/placitum-action/internal/desired"
-	"github.com/exemt/placitum-shared/flow"
 	"github.com/exemt/placitum-action/internal/livelist"
-	"github.com/exemt/placitum-action/internal/logsink"
-	"github.com/exemt/placitum-shared/netinfo"
 	"github.com/exemt/placitum-action/internal/policy"
-	"github.com/exemt/placitum-shared/pulse"
 	"github.com/exemt/placitum-action/internal/queue"
+	"github.com/exemt/placitum-shared/dataset"
+	"github.com/exemt/placitum-shared/flow"
+	"github.com/exemt/placitum-shared/logkit"
+	"github.com/exemt/placitum-shared/netinfo"
+	"github.com/exemt/placitum-shared/pulse"
 )
 
 func main() {
@@ -58,13 +58,13 @@ func run() error {
 	 * остаётся на месте.
 	 */
 	var (
-		logs  *logsink.Sink
+		logs  *logkit.Sink
 		logIO *flow.Counter
 	)
 
 	if config.LogShip() {
 		logIO = flow.New()
-		logs = logsink.New(config.LogWriter(cfg.Name), cfg.Name, logIO)
+		logs = logkit.NewSink(config.LogWriter(cfg.Name), cfg.Name, logIO)
 
 		defer logs.Close()
 	}
@@ -123,13 +123,13 @@ func run() error {
 	}
 
 	if logs != nil {
-		if err := logsink.Ensure(nc); err != nil {
+		if err := logkit.Ensure(nc); err != nil {
 			log.Warn("log stream", "error", err.Error())
 		}
 
 		logs.Attach(nc)
-		log.Info("log stream", "stream", logsink.Stream,
-			"subject", logsink.Subject(logs.Writer()))
+		log.Info("log stream", "stream", logkit.Stream,
+			"subject", logkit.Subject(logs.Writer()))
 	}
 
 	/*
@@ -197,7 +197,7 @@ func run() error {
 
 	h := &handler{cfg: cfg, log: log, nc: nc,
 		audit: auditSink, store: store, loader: loader, mirror: mirror,
-		lists: dataset.New(nc, cfg.Name), resolver: resolver}
+		lists: dataset.NewBackground(nc, cfg.Name, log), resolver: resolver}
 
 	pool := queue.New(cfg.Workers, cfg.QueueDepth, cfg.ReserveMS, cfg.MinBudgetMS,
 		cfg.QueueFull, h.evaluate)

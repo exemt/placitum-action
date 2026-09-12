@@ -22,8 +22,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/exemt/placitum-shared/netinfo"
 	"github.com/exemt/placitum-action/internal/policy"
+	"github.com/exemt/placitum-shared/netinfo"
 )
 
 /*

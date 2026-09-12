@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/exemt/placitum-shared/flow"
 	"github.com/exemt/placitum-action/internal/protocol"
+	"github.com/exemt/placitum-shared/flow"
 )
 
 const (

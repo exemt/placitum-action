@@ -106,10 +106,10 @@ func TestSourceObjects(t *testing.T) {
 
 	// Через операнды: $http_ по имени nginx, $waf_var из секции.
 	for raw, want := range map[string]string{
-		"$http_x_api_key":            "k1",
-		"$cookie_sid":                "ok",
-		"$arg_token":                 "a b",
-		"$waf_var.ja3":               "abc",
+		"$http_x_api_key":             "k1",
+		"$cookie_sid":                 "ok",
+		"$arg_token":                  "a b",
+		"$waf_var.ja3":                "abc",
 		"$waf_request_headers.cookie": "sid=ok; theme=\"dark\"",
 	} {
 		op, err := policy.ParseOperand(raw)
