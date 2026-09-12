@@ -1,0 +1,24 @@
+# Стендовый отправитель для e2e модификатора ответов
+# (tests/runner/scenarios/rewrite.mjs): по суффиксу пути просит rewrite
+# включить выключенную группу либо не править ответ вовсе. Приём стережёт
+# профиль stand самого rewrite -- правила с from: action и этими кодами.
+
+mode: enforce
+rules:
+  - name: e2e-mutate
+    match:
+      path_prefix: "/rewrite-e2e-action/mutate"
+    actions:
+      - to: rewrite
+        do: mutate
+        group: prefixed
+        set: on
+        code: E2E_MUTATE
+
+  - name: e2e-skip
+    match:
+      path_prefix: "/rewrite-e2e-action/skip"
+    actions:
+      - to: rewrite
+        do: skip
+        code: E2E_SKIP
