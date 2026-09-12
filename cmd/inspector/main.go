@@ -78,6 +78,8 @@ func run() error {
 
 	log := slog.New(slog.NewJSONHandler(logs.Tee(os.Stdout),
 		&slog.HandlerOptions{Level: level}))
+
+	log.Info("build", "version", version, "revision", revision)
 	slog.SetDefault(log)
 
 	store, err := policy.NewStore(cfg.ProfilesDir, log)
@@ -304,6 +306,7 @@ func startHeartbeat(
 		}
 
 		msg := pulse.Build(id, cfg.Name, cfg.Subject, cfg.Queue, work, io)
+		msg.Version, msg.Revision = version, revision
 
 		if hash, rev, apply, names := applied.Snapshot(); apply != "" {
 			msg.ConfigHash = hash

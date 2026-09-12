@@ -29,7 +29,12 @@ ENV CGO_ENABLED=0
 # дороже, чем здесь.
 RUN go test ./...
 
-RUN go build -trimpath -ldflags="-s -w" -o /out/action ./cmd/inspector
+# Сборка в бинарь: версия и ревизия видны в журнале старта и в кадре
+# присутствия, а не только в метках образа.
+ARG VERSION=dev
+ARG REVISION=unknown
+RUN go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/action ./cmd/inspector && \
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/action-probe ./cmd/probe
 
 FROM alpine:3.22
 
@@ -47,7 +52,7 @@ LABEL org.opencontainers.image.title="placitum/action" \
 
 WORKDIR /app
 
-COPY --from=build /out/action /usr/local/bin/
+COPY --from=build /out/action /out/action-probe /usr/local/bin/
 COPY profiles ./profiles
 COPY inspector.conf ./inspector.conf
 
@@ -65,4 +70,8 @@ ENV NATS_URL=nats://nats:4222 \
 
 # CMD, а не ENTRYPOINT: как у остальных инспекторов, и `docker run <образ> sh`
 # остаётся рабочим способом заглянуть внутрь.
+# Проба идёт тем же путём, что запрос модуля: шина, подписка, профили,
+# воркеры. Профиль default, вердикт любой -- здоровье, а не решение.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["action-probe", "--quiet", "--timeout", "1s"]
 CMD ["action"]
