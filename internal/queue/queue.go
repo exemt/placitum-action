@@ -31,6 +31,11 @@ type Task struct {
 	Req   *protocol.Request
 	Reply string
 
+	// Fill -- заполнение очереди в процентах в миг постановки: сколько мест
+	// было занято до этого запроса. 100 -- очередь была полна: запрос сброшен
+	// либо ждал места. С ним сравнивают порог строки перегрузки профиля.
+	Fill int
+
 	enqueued time.Time
 }
 
@@ -108,6 +113,8 @@ func (p *Pool) Submit(t *Task) {
 		return
 	}
 
+	t.Fill = p.fillLocked()
+
 	if len(p.q) < p.depth {
 		p.enqueueLocked(t)
 		p.mu.Unlock()
@@ -172,6 +179,16 @@ func (p *Pool) enqueueLocked(t *Task) {
 	p.q = append(p.q, t)
 	p.Accepted.Add(1)
 	p.cond.Signal()
+}
+
+// fillLocked -- занятость очереди в процентах. Полная -- ровно 100: и
+// сброшенный запрос, и ждущий места встали туда, где места не было.
+func (p *Pool) fillLocked() int {
+	if len(p.q) >= p.depth {
+		return 100
+	}
+
+	return len(p.q) * 100 / p.depth
 }
 
 func (p *Pool) waitLeft(t *Task) time.Duration {

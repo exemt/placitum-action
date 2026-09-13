@@ -33,6 +33,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/exemt/placitum-action/internal/overload"
 	"github.com/exemt/placitum-action/internal/protocol"
 )
 
@@ -153,6 +154,10 @@ type Rule struct {
 	// Writes -- записи в живые наборы: исполняет сам инспектор, на провод
 	// модулю они не едут.
 	Writes []Write
+	// Overload -- строка перегрузки: срабатывает не по совпадению запроса, а
+	// по заполнению очереди не ниже At (internal/overload).
+	Overload bool
+	At       int
 }
 
 /*
@@ -267,7 +272,7 @@ func (p *Profile) Collect(ev *Evaluator, method, uri string) ([]protocol.Action,
 	for i := range p.Rules {
 		r := &p.Rules[i]
 
-		if !r.Match.Matches(method, uri) {
+		if r.Overload || !r.Match.Matches(method, uri) {
 			continue
 		}
 
@@ -331,6 +336,10 @@ type fileMatch struct {
 type fileRule struct {
 	Name  string    `yaml:"name"`
 	Match fileMatch `yaml:"match"`
+	// On / At -- строка перегрузки: on: overload и порог заполнения очереди
+	// в процентах (internal/overload). Пусто -- правило по совпадению.
+	On string `yaml:"on"`
+	At *int   `yaml:"at"`
 	// If / Unless -- имя условия профиля: действия едут, когда оно истинно
 	// либо, соответственно, ложно. Одно из двух; без обоих -- всегда.
 	If      string       `yaml:"if"`
@@ -395,6 +404,35 @@ func parseRule(at string, index int, fr fileRule, conds map[string]*Condition) (
 	// его значило бы заставлять придумывать слова тому, у кого их нет.
 	if rule.Name == "" {
 		rule.Name = fmt.Sprintf("rule-%d", index+1)
+	}
+
+	/*
+	 * Строка перегрузки срабатывает по заполнению очереди, а не по запросу:
+	 * пути и условия у неё нет, чтобы на снятом запросе не ходить ни в
+	 * обменник, ни в зеркало.
+	 */
+	switch on := strings.TrimSpace(fr.On); on {
+	case "":
+		if fr.At != nil {
+			return rule, fmt.Errorf("%s: at is only for on: %s", at, overload.On)
+		}
+
+	case overload.On:
+		if err := overload.Check(fr.At); err != nil {
+			return rule, fmt.Errorf("%s: %w", at, err)
+		}
+
+		if strings.TrimSpace(fr.Match.PathPrefix) != "" || len(fr.Match.Suffixes) > 0 ||
+			fr.Match.Static || len(fr.Match.Methods) > 0 ||
+			strings.TrimSpace(fr.If) != "" || strings.TrimSpace(fr.Unless) != "" {
+			return rule, fmt.Errorf("%s: on: %s takes no match, if or unless", at, overload.On)
+		}
+
+		rule.Overload = true
+		rule.At = overload.At(fr.At)
+
+	default:
+		return rule, fmt.Errorf("%s: on must be %s or empty, got %q", at, overload.On, on)
 	}
 
 	/*
@@ -876,4 +914,31 @@ func Names(profiles map[string]*Profile) []string {
 	sort.Strings(out)
 
 	return out
+}
+
+/*
+ * CollectOverload -- строки перегрузки: fill -- заполнение очереди при
+ * постановке запроса, shed -- запрос снят по полной очереди
+ * (internal/overload).
+ */
+func (p *Profile) CollectOverload(fill int, shed bool) ([]protocol.Action, []Write, []string) {
+	var (
+		actions []protocol.Action
+		writes  []Write
+		names   []string
+	)
+
+	for i := range p.Rules {
+		r := &p.Rules[i]
+
+		if !r.Overload || !overload.Fires(r.At, fill, shed) {
+			continue
+		}
+
+		actions = append(actions, r.Actions...)
+		writes = append(writes, r.Writes...)
+		names = append(names, r.Name)
+	}
+
+	return actions, writes, names
 }
