@@ -1,0 +1,13 @@
+README.md
+README.ru.md
+INSTALL.md
+INSTALL.ru.md
+LICENSE.md
+LICENSE.ru.md
+.gitignore
+.gitattributes
+.github/
+
+/action
+/inspector
+/profiles.applied/

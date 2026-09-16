@@ -1,0 +1,37 @@
+# Default profile. The format is described in README.md.
+#
+# Rules accumulate: every matching rule fires, and actions add up in the order of the rules.
+# An empty match matches every request of the profile.
+#
+# Example 1: soften modsec on a trusted route. delta is a percentage of the coefficient applied to
+# the score modsec reports to the module: minus is a discount (measured 50, reports 25 with -50),
+# plus makes the client's behaviour more expensive. The thresholds of modsec and of the route do not
+# move. The coefficient has no effect until the modsec profile has an acceptance rule
+# from: "action" with accept: [threshold]: the channel is advisory.
+#
+#   - name: calm-modsec-healthz
+#     match:
+#       path_prefix: "/healthz"
+#     actions:
+#       - to: modsec
+#         do: threshold
+#         delta: -50
+#         code: ROUTE_TRUSTED
+#
+# Example 2: tell captcha that the client loads static files; a live browser does, bots usually do
+# not. What to do with the fact (reset a counter, lower the suspicion of the address) is up to the
+# captcha profile: the code with a negative weight is assigned there.
+#
+#   - name: static-fetch
+#     match:
+#       static: true
+#       methods: [GET]
+#     actions:
+#       - to: captcha
+#         do: note
+#         apply: ip
+#         code: STATIC_FETCH
+#         value: 10
+
+mode: enforce
+rules: []
