@@ -12,7 +12,7 @@ address and no service, and adding a copy touches neither the node nor the confi
 | --- | --- | --- |
 | NATS | yes | the `waf.req.action` queue, audit, log, profile generations |
 | Controller | yes | sends profiles as generations |
-| Exchange Redis | for conditions on headers, cookies, arguments | request snapshot by locator |
+| Buffer Redis | for conditions on headers, cookies, arguments | request snapshot by locator |
 | Internal Redis | for dataset conditions | mirror of keeper's active datasets |
 | `keeper` | for dataset conditions and writes | owns dataset contents |
 | `geo` | for writes with `write: net` / `net_all` / `asn` | announcements and AS composition by address |
@@ -27,8 +27,8 @@ The main ones are below; the full table is in [README.md](README.md#settings).
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222`; `nats://nats:4222` in the image | bus |
-| `REDIS_URL` | from `inspector.conf` | exchange: request objects for conditions |
-| `REDIS_INTERNAL_URL` | from `inspector.conf` | internal Redis: dataset mirror. Empty falls back to the exchange with a warning in the log |
+| `REDIS_URL` | from `inspector.conf` | buffer: request objects for conditions |
+| `REDIS_INTERNAL_URL` | from `inspector.conf` | internal Redis: dataset mirror. Empty falls back to the buffer with a warning in the log |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_PROFILES` | `/app/profiles` in the image | profiles shipped in the image; generations go to `WAF_ACTION_DATA` |
@@ -72,7 +72,7 @@ with the address, `connected` with the queue name and `desired watch on`.
 ## Pitfalls
 
 - **No verdict except `allow`.** Its own failure (a broken message, an unsupported version,
-  overload, an unavailable exchange) is `verdict: error` with an `ACTION_*` code, not a silent
+  overload, an unavailable buffer) is `verdict: error` with an `ACTION_*` code, not a silent
   `allow`. That does not make it a gate: an error of a passive inspector does not break the wave.
-- **Header conditions without the exchange** treat the object as unavailable: the rule does not
+- **Header conditions without the buffer** treat the object as unavailable: the rule does not
   fire, and the audit shows why.

@@ -4,8 +4,8 @@ English · [Русский](README.ru.md)
 
 A pure sender of the action channel. It checks nothing, blocks nobody and has no verdict except
 `allow`: it looks at the route and tells its neighbours what to do. It can soften `modsec` on a
-trusted path, tell captcha that a client loads static files, ask to let a service request through,
-or ask the module to add or remove score on the route (`do: score`), mark the record, or override
+trusted path, tell captcha that a client loads static files, signal to let a service request through,
+or signal the module to add or remove score on the route (`do: score`), mark the record, or override
 the log and archive. What to say can depend on the request: a profile has **conditions**,
 comparisons of request values with datasets and text, and every rule runs always, if a condition
 holds, or unless it holds.
@@ -14,7 +14,7 @@ Two properties set it apart from checking inspectors:
 
 - **No verdict except `allow`.** It checks nothing and adds nothing to the score; it moves score on
   the route with a `score` request that the module executes. Its own failures (a broken message, an
-  unsupported schema version, overload, a panic, an object the exchange did not return) are
+  unsupported schema version, overload, a panic, an object the buffer did not return) are
   `verdict: error` with an `ACTION_*` code, so a failing process does not look healthy. An error of
   a passive inspector does not break the wave.
 - **It runs on an earlier wave than its receivers.** Neighbours on the same wave do not see its
@@ -130,19 +130,19 @@ missing data never turns into a match.
 
 | Value | Source | What it gives |
 | --- | --- | --- |
-| `$uri`, `$request_uri`, `$host`, `$request_method`, `$scheme`, `$remote_addr` | message | the field as is; `$request_uri` is the path with the query string from the exchange |
-| `$http_<name>`, `$cookie_<name>`, `$arg_<name>` | exchange | the first occurrence; header names as in nginx (lower case, `-` becomes `_`), cookie and argument names exact |
-| `$waf_request_headers.<name\|*>`, `$waf_request_cookies.<name\|*>`, `$waf_request_args.<name\|*>` | exchange | every value; `*` means every pair of the object |
+| `$uri`, `$request_uri`, `$host`, `$request_method`, `$scheme`, `$remote_addr` | message | the field as is; `$request_uri` is the path with the query string from the buffer |
+| `$http_<name>`, `$cookie_<name>`, `$arg_<name>` | buffer | the first occurrence; header names as in nginx (lower case, `-` becomes `_`), cookie and argument names exact |
+| `$waf_request_headers.<name\|*>`, `$waf_request_cookies.<name\|*>`, `$waf_request_args.<name\|*>` | buffer | every value; `*` means every pair of the object |
 | `$waf_var.<name>` | `vars` section of the message | a standard module field (`user_agent`, `referer`, `xff`, …) or `waf_var`; sent according to `vars=` of the declaration |
 
 Headers, cookies and arguments come from the route snapshot (`waf_capture`, `headers args` by
-default). The inspector fetches them from the exchange lazily, for the first condition that needs
-them, and once per request; a profile without such conditions never touches the exchange. When the
+default). The inspector fetches them from the buffer lazily, for the first condition that needs
+them, and once per request; a profile without such conditions never touches the buffer. When the
 route does not capture headers, `$http_<name>` is read from `vars` if the field is there
 (`user_agent`, `referer`, `x_forwarded_for` as `xff`, `accept_language`, `origin`, `content_type`,
 `accept`). Arguments are parsed like in the module selector: percent-decoding, `+` becomes a space;
 cookies are trimmed and unquoted, without decoding. If an object existed but could not be fetched
-(the exchange did not answer, the key is gone), that is an inspector failure: `verdict: error` with
+(the buffer did not answer, the key is gone), that is an inspector failure: `verdict: error` with
 `ACTION_STORE_ERROR`, and `waf_exception` of the inspector class chooses the outcome.
 
 Datasets are only **active** datasets of the space: the inspector mirrors them over the keeper
@@ -168,8 +168,8 @@ zero). Only a receiver with an acceptance rule for this sender by name applies t
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222` | bus; a comma-separated list |
-| `REDIS_URL` | `url` from `inspector.conf` | exchange: headers and query string for conditions. Empty means such objects are unavailable, with a warning at start |
-| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it. Empty falls back to the exchange with `internal redis falls back to the exchange` in the log; with both empty datasets stay empty |
+| `REDIS_URL` | `url` from `inspector.conf` | buffer: headers and query string for conditions. Empty means such objects are unavailable, with a warning at start |
+| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it. Empty falls back to the buffer with `internal redis falls back to the buffer` in the log; with both empty datasets stay empty |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_QUEUE` | the name | NATS queue group |
