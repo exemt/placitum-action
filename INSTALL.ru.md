@@ -31,7 +31,7 @@
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | подписка |
 | `WAF_ACTION_NAME` | `action` | имя в реестре инспекторов |
 | `WAF_ACTION_PROFILES` | в образе `/app/profiles` | профили из образа; поколение кладётся в `WAF_ACTION_DATA` |
-| `WAF_ACTION_GEO_ADDR` | пусто | кодер гео (`host:port`). Пусто — записи с `write: net` / `net_all` / `asn` отвечают `ACTION_GEO_UNAVAILABLE` |
+| `WAF_ACTION_GEO_ADDR` | пусто | справочник сетей (`host:port`). Пусто — записи с `write: net` / `net_all` / `asn` отвечают `ACTION_GEO_UNAVAILABLE` |
 | `WAF_ACTION_LOG` | `info` | стартовый уровень журнала; живьём его переставляет панель |
 
 ## Docker Compose
@@ -70,7 +70,7 @@ nats sub 'WAF_STATUS.inspector.action.>' --count 1
 
 ## Типичные ошибки
 
-- **Вердикта, кроме `allow`, у него нет.** Собственный сбой — битое сообщение, чужая версия,
+- **Вердикта, кроме `allow`, у него нет.** Собственный сбой — повреждённое сообщение, чужая версия,
   перегрузка, недоступный буфер — это `verdict: error` с кодом `ACTION_*`, а не тихий `allow`.
   Гейтом инспектор от этого не становится: `error` пассивного волну не срывает.
 - **Условия по заголовкам без буфера** считают объект недоступным — правило с таким условием не

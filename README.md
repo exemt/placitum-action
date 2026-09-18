@@ -105,8 +105,8 @@ it off before the bus. `write` takes the same four kinds as every sender: `addr`
 address (the default), `net` the effective announcement, `net_all` every announcement covering the
 address, including wide foreign ones, and `asn` the whole autonomous system. The batch goes to
 keeper in one frame with one expiry and one reason (`ACTION_LIST` without `code`): all or nothing.
-For `net`, `net_all` and `asn` the inspector asks the geo coder over gRPC (`WAF_ACTION_GEO_ADDR`)
-synchronously, within the message budget. If the coder is needed and silent, the answer is
+For `net`, `net_all` and `asn` the inspector asks the network directory over gRPC (`WAF_ACTION_GEO_ADDR`)
+synchronously, within the message budget. If the network directory is needed and silent, the answer is
 `verdict: error` with `ACTION_GEO_UNAVAILABLE`, the route's `waf_exception` chooses the outcome, and
 address writes of the same request still go out. A write fires on every matching request and
 extends the expiry: the inspector keeps no memory of what it already wrote, so filter repeats with a
@@ -177,9 +177,9 @@ zero). Only a receiver with an acceptance rule for this sender by name applies t
 | `WAF_ACTION_DATA` | `<profiles>.applied` | where rollout puts the applied generation |
 | `WAF_ACTION_CONF` | `inspector.conf` in the working directory, then `/app/inspector.conf` | queue and Redis settings |
 | `WAF_ACTION_RELOAD_EVERY` | `1s` | how often to check the profile directory |
-| `WAF_ACTION_GEO_ADDR` | empty | geo coder gRPC address (`host:port`) for `write: net`, `net_all` and `asn`. Empty makes such writes answer `ACTION_GEO_UNAVAILABLE`; address writes work |
-| `WAF_ACTION_GEO_TIMEOUT` | `500ms` | how long to wait for the coder on a miss, within the message budget |
-| `WAF_ACTION_GEO_NEG_MAX` | `0` | negative cache limit of the coder client; `0` means the default of one million |
+| `WAF_ACTION_GEO_ADDR` | empty | network directory gRPC address (`host:port`) for `write: net`, `net_all` and `asn`. Empty makes such writes answer `ACTION_GEO_UNAVAILABLE`; address writes work |
+| `WAF_ACTION_GEO_TIMEOUT` | `500ms` | how long to wait for the network directory on a miss, within the message budget |
+| `WAF_ACTION_GEO_NEG_MAX` | `0` | negative cache limit of the network directory client; `0` means the default of one million |
 | `WAF_ACTION_WORKERS` | number of CPUs | parallel workers |
 | `WAF_ACTION_QUEUE_DEPTH`, `WAF_ACTION_QUEUE_FULL`, `WAF_ACTION_QUEUE_EXPAND` | from `inspector.conf` | queue overrides |
 | `WAF_ACTION_RESERVE_MS`, `WAF_ACTION_MIN_BUDGET_MS` | `1`, `1` | deadline reserve and minimum budget of a message, in milliseconds |

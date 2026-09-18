@@ -32,7 +32,7 @@ The main ones are below; the full table is in [README.md](README.md#settings).
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_PROFILES` | `/app/profiles` in the image | profiles shipped in the image; generations go to `WAF_ACTION_DATA` |
-| `WAF_ACTION_GEO_ADDR` | empty | geo coder (`host:port`). Empty makes writes with `write: net`, `net_all` or `asn` answer `ACTION_GEO_UNAVAILABLE` |
+| `WAF_ACTION_GEO_ADDR` | empty | network directory (`host:port`). Empty makes writes with `write: net`, `net_all` or `asn` answer `ACTION_GEO_UNAVAILABLE` |
 | `WAF_ACTION_LOG` | `info` | starting log level; the panel changes it live |
 
 ## Docker Compose
