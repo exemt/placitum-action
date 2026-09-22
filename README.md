@@ -128,6 +128,11 @@ dataset": a missing cookie is not among the trusted ones either, so `not_in` on 
 the mirror has not received yet and an object the route does not capture behave the same way:
 missing data never turns into a match.
 
+A profile rolled out by the controller keeps one line per condition: in the panel, AND and OR are
+groups in a rule's When. The controller prints those groups as conditions of their own, `rule-N` for
+the When of rule N and `rule-N.M` for its group M, so they show up in `engine.conditions` next to
+the named ones.
+
 | Value | Source | What it gives |
 | --- | --- | --- |
 | `$uri`, `$request_uri`, `$host`, `$request_method`, `$scheme`, `$remote_addr` | message | the field as is; `$request_uri` is the path with the query string from the buffer |
