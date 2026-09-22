@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222`; в образе `nats://nats:4222` | шина |
 | `REDIS_URL` | из `inspector.conf` | буфер: объекты запроса для условий |
-| `REDIS_INTERNAL_URL` | из `inspector.conf` | внутренний Redis: зеркало наборов. Пусто — берётся буфер с предупреждением в журнале |
+| `REDIS_INTERNAL_URL` | из `inspector.conf` | внутренний Redis: зеркало наборов и тела статических списков. Пусто — берётся буфер с предупреждением в журнале |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | подписка |
 | `WAF_ACTION_NAME` | `action` | имя в реестре инспекторов |
 | `WAF_ACTION_PROFILES` | в образе `/app/profiles` | профили из образа; поколение кладётся в `WAF_ACTION_DATA` |

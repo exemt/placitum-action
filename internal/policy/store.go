@@ -171,6 +171,16 @@ func fingerprint(dir string) (string, error) {
 		}
 	}
 
+	// The static lists change with the profiles that name them, and a hand-edited list must reload
+	// as well.
+	if lists, err := os.ReadDir(filepath.Join(dir, ListsDir)); err == nil {
+		for _, e := range lists {
+			if !e.IsDir() {
+				names = append(names, filepath.Join(ListsDir, e.Name()))
+			}
+		}
+	}
+
 	sort.Strings(names)
 
 	h := sha256.New()

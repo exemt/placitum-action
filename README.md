@@ -39,7 +39,7 @@ conditions:              # named conditions; rules reference them by name
     all:                 # lines joined with AND: the condition holds when every line matches
       - value: $http_x_api_key     # a request value, written as in the module's if
         op: in                     # in | not_in against a dataset; eq | ne against text
-        dataset: api_keys          # an active dataset of the space (keeper mirror)
+        dataset: api_keys          # a list of the space: dynamic (keeper mirror) or static (static: true)
       - value: $request_method
         op: eq
         text: POST
@@ -150,12 +150,16 @@ cookies are trimmed and unquoted, without decoding. If an object existed but cou
 (the buffer did not answer, the key is gone), that is an inspector failure: `verdict: error` with
 `ACTION_STORE_ERROR`, and `waf_exception` of the inspector class chooses the outcome.
 
-Datasets are only **active** datasets of the space: the inspector mirrors them over the keeper
-protocol (`waf.sets.<set>`) and requests them with every profile snapshot, so the first request does
-not wait for a snapshot. `type: cidr` marks an address dataset: the value must be an address, and
-the comparison works on addresses and prefixes. `hash: md5` marks a dataset with `hash=md5`: the
-value is hashed before the lookup. The controller prints both keys from the dataset catalog; in
-hand-written files copy them from the dataset definition.
+A dataset is a list of the space, dynamic or static. A dynamic (active) list is mirrored over the
+keeper protocol (`waf.sets.<set>`) and requested with every profile snapshot, so the first request
+does not wait for a snapshot. A static list (`static: true`) comes with the generation: the manifest
+names it with the sha256 of its body, the inspector reads the body from the internal Redis
+(`waf.blob.<hex>`), checks the hash and keeps it next to the profiles (`profiles/.lists/<name>.txt`,
+one value per line). A profile whose static list is not there does not load. `type: cidr` marks an
+address dataset: the value must be an address, and the comparison works on addresses and prefixes.
+`hash: md5` marks a dataset with `hash=md5`: the value is hashed before the lookup. The controller
+prints all three keys from the dataset catalog; in hand-written files copy them from the dataset
+definition.
 
 The `kind=inspector` event shows what was evaluated: `engine.conditions` maps condition names to
 true or false for the conditions that were reached, and `engine.notes` says where data was missing
@@ -174,7 +178,7 @@ zero). Only a receiver with an acceptance rule for this sender by name applies t
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222` | bus; a comma-separated list |
 | `REDIS_URL` | `url` from `inspector.conf` | buffer: headers and query string for conditions. Empty means such objects are unavailable, with a warning at start |
-| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it. Empty falls back to the buffer with `internal redis falls back to the buffer` in the log; with both empty datasets stay empty |
+| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it, and the bodies of static lists come from it. Empty falls back to the buffer with `internal redis falls back to the buffer` in the log; with both empty datasets stay empty |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_QUEUE` | the name | NATS queue group |

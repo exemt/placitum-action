@@ -28,7 +28,7 @@ The main ones are below; the full table is in [README.md](README.md#settings).
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222`; `nats://nats:4222` in the image | bus |
 | `REDIS_URL` | from `inspector.conf` | buffer: request objects for conditions |
-| `REDIS_INTERNAL_URL` | from `inspector.conf` | internal Redis: dataset mirror. Empty falls back to the buffer with a warning in the log |
+| `REDIS_INTERNAL_URL` | from `inspector.conf` | internal Redis: dataset mirror and the bodies of static lists. Empty falls back to the buffer with a warning in the log |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_PROFILES` | `/app/profiles` in the image | profiles shipped in the image; generations go to `WAF_ACTION_DATA` |

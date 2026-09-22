@@ -156,6 +156,8 @@ const (
 	OpIsNot Op = "is_not"
 )
 
+// Clause is one row of a condition. Static marks a static list: it comes with the generation and
+// is looked up in static, not in the mirror of dynamic lists.
 type Clause struct {
 	Operand Operand
 	Op      Op
@@ -164,6 +166,8 @@ type Clause struct {
 	Text    string
 	Addr    bool
 	MD5     bool
+	Static  bool
+	static  *staticSet
 }
 
 func (c *Clause) Negated() bool {
@@ -399,6 +403,10 @@ func (e *Evaluator) hit(cond string, c *Clause, value string) bool {
 		return value == c.Text
 
 	case OpIn, OpNotIn:
+		if c.Static {
+			return e.hitStatic(cond, c, value)
+		}
+
 		if e.sets == nil {
 			e.note(cond, c, NoteNotReady)
 
@@ -437,6 +445,34 @@ func (e *Evaluator) hit(cond string, c *Clause, value string) bool {
 	return false
 }
 
+// hitStatic looks a value up in a static list. The list is loaded with the generation, so it is
+// always ready; a clause parsed without its list (no LoadDir) answers as a list not ready.
+func (e *Evaluator) hitStatic(cond string, c *Clause, value string) bool {
+	if c.static == nil {
+		e.note(cond, c, NoteNotReady)
+
+		return false
+	}
+
+	if c.Addr {
+		ip, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err != nil {
+			e.note(cond, c, NoteNotAddr)
+
+			return false
+		}
+
+		return c.static.containsAddr(ip)
+	}
+
+	if c.MD5 {
+		sum := md5.Sum([]byte(value))
+		value = hex.EncodeToString(sum[:])
+	}
+
+	return c.static.contains(value)
+}
+
 func (e *Evaluator) note(cond string, c *Clause, why string) {
 	for _, n := range e.Notes {
 		if n.Condition == cond && n.Value == c.Operand.Raw && n.Why == why {
@@ -455,6 +491,7 @@ type fileClause struct {
 	Cond    string `yaml:"cond"`
 	Type    string `yaml:"type"`
 	Hash    string `yaml:"hash"`
+	Static  bool   `yaml:"static"`
 }
 
 type fileCondition struct {
@@ -568,8 +605,8 @@ func parseClause(at string, f fileClause) (Clause, error) {
 		}
 
 		if strings.TrimSpace(f.Value) != "" || strings.TrimSpace(f.Dataset) != "" || f.Text != "" ||
-			strings.TrimSpace(f.Type) != "" || strings.TrimSpace(f.Hash) != "" {
-			return Clause{}, fmt.Errorf("%s: a cond row takes no value, dataset, text, type or hash", at)
+			strings.TrimSpace(f.Type) != "" || strings.TrimSpace(f.Hash) != "" || f.Static {
+			return Clause{}, fmt.Errorf("%s: a cond row takes no value, dataset, text, type, hash or static", at)
 		}
 
 		if !condNameRe.MatchString(ref) {
@@ -589,6 +626,7 @@ func parseClause(at string, f fileClause) (Clause, error) {
 	switch cl.Op {
 	case OpIn, OpNotIn:
 		cl.Dataset = strings.TrimSpace(f.Dataset)
+		cl.Static = f.Static
 
 		if cl.Dataset == "" {
 			return cl, fmt.Errorf("%s: %s needs a dataset", at, cl.Op)
@@ -629,8 +667,9 @@ func parseClause(at string, f fileClause) (Clause, error) {
 
 		cl.Text = f.Text
 
-		if strings.TrimSpace(f.Dataset) != "" || strings.TrimSpace(f.Type) != "" || strings.TrimSpace(f.Hash) != "" {
-			return cl, fmt.Errorf("%s: dataset, type and hash are only for in and not_in", at)
+		if strings.TrimSpace(f.Dataset) != "" || strings.TrimSpace(f.Type) != "" || strings.TrimSpace(f.Hash) != "" ||
+			f.Static {
+			return cl, fmt.Errorf("%s: dataset, type, hash and static are only for in and not_in", at)
 		}
 
 	case "":

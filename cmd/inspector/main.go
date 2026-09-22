@@ -188,7 +188,13 @@ func run() error {
 
 	var applied *desired.Applied
 
-	applied, err = desired.Watch(ctx, nc, store, cfg.DataDir, level, log)
+	var blobs desired.BlobSource
+
+	if sets != nil {
+		blobs = sets
+	}
+
+	applied, err = desired.Watch(ctx, nc, blobs, store, cfg.DataDir, level, log)
 	if err != nil {
 		log.Warn("desired watch failed", "error", err.Error())
 	} else {

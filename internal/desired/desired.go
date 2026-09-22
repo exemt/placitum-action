@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -29,7 +31,19 @@ const (
 	ApplyOK     = "ok"
 	ApplyFailed = "apply_failed"
 
+	// BlobPrefix keys the bodies of static lists in the internal Redis, as the controller writes
+	// them: waf.blob.<hex of sha256>.
+	BlobPrefix = "waf.blob."
+
 	treeDir = "profiles"
+
+	blobTimeout = 15 * time.Second
+	fetchRetry  = 30 * time.Second
+)
+
+var (
+	listNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+	listHashRe = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
 type File struct {
@@ -41,11 +55,14 @@ type Profile struct {
 	Files []File `json:"files"`
 }
 
+// Manifest is a generation of action profiles. Lists names the static lists the conditions compare
+// with: name -> sha256 of the body in the internal Redis (the manifest carries only the hash).
 type Manifest struct {
 	V          int                `json:"v"`
 	Rev        int                `json:"rev"`
 	ConfigHash string             `json:"config_hash"`
 	Profiles   map[string]Profile `json:"profiles"`
+	Lists      map[string]string  `json:"lists,omitempty"`
 	Settings   *Settings          `json:"settings,omitempty"`
 }
 
@@ -79,11 +96,21 @@ func Parse(raw []byte) (*Manifest, error) {
 		}
 	}
 
+	for name, hash := range m.Lists {
+		if !listNameRe.MatchString(name) {
+			return nil, fmt.Errorf("manifest: bad list name %q", name)
+		}
+
+		if !listHashRe.MatchString(hash) {
+			return nil, fmt.Errorf("manifest: list %q: bad hash %q", name, hash)
+		}
+	}
+
 	if err := m.Settings.validate(); err != nil {
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
 
-	got := HashWith(m.Profiles, m.Settings)
+	got := HashLists(m.Profiles, m.Lists, m.Settings)
 
 	if m.ConfigHash != "" && m.ConfigHash != got {
 		return nil, fmt.Errorf("manifest: config_hash mismatch: got %s want %s",
@@ -96,6 +123,13 @@ func Parse(raw []byte) (*Manifest, error) {
 }
 
 func HashWith(profiles map[string]Profile, settings *Settings) string {
+	return HashLists(profiles, nil, settings)
+}
+
+// HashLists is the config_hash of a generation, the same as the controller counts it
+// (hashActionProfiles): the profiles, then "list" NUL name NUL hash NUL per static list by name,
+// then the settings. Without lists the hash is the one of the older generations.
+func HashLists(profiles map[string]Profile, lists map[string]string, settings *Settings) string {
 	names := make([]string, 0, len(profiles))
 
 	for name := range profiles {
@@ -118,6 +152,21 @@ func HashWith(profiles map[string]Profile, settings *Settings) string {
 		}
 	}
 
+	listNames := make([]string, 0, len(lists))
+
+	for name := range lists {
+		listNames = append(listNames, name)
+	}
+
+	sort.Strings(listNames)
+
+	for _, name := range listNames {
+		for _, part := range []string{"list", name, lists[name]} {
+			_, _ = sum.Write([]byte(part))
+			_, _ = sum.Write([]byte{0})
+		}
+	}
+
 	writeSettings(sum, settings)
 
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
@@ -135,7 +184,64 @@ func (m *Manifest) Names() []string {
 	return names
 }
 
-func Apply(store *policy.Store, dataDir string, m *Manifest) error {
+// BlobSource reads bodies from the internal Redis: nil for a missing key.
+type BlobSource interface {
+	Objects(ctx context.Context, keys []string) ([][]byte, error)
+}
+
+// FetchLists reads the bodies of the static lists of a generation and checks each against its
+// hash.
+func FetchLists(ctx context.Context, blobs BlobSource, m *Manifest) (map[string][]byte, error) {
+	out := make(map[string][]byte, len(m.Lists))
+
+	if len(m.Lists) == 0 {
+		return out, nil
+	}
+
+	if blobs == nil {
+		return nil, fmt.Errorf("the generation carries static lists, and the internal Redis is not configured")
+	}
+
+	names := make([]string, 0, len(m.Lists))
+
+	for name := range m.Lists {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	keys := make([]string, len(names))
+
+	for i, name := range names {
+		keys[i] = BlobPrefix + strings.TrimPrefix(m.Lists[name], "sha256:")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, blobTimeout)
+	defer cancel()
+
+	bodies, err := blobs.Objects(ctx, keys)
+	if err != nil {
+		return nil, fmt.Errorf("redis: %w", err)
+	}
+
+	for i, name := range names {
+		if i >= len(bodies) || bodies[i] == nil {
+			return nil, fmt.Errorf("list %s: %s is missing", name, keys[i])
+		}
+
+		sum := sha256.Sum256(bodies[i])
+
+		if "sha256:"+hex.EncodeToString(sum[:]) != m.Lists[name] {
+			return nil, fmt.Errorf("list %s: %s hash mismatch", name, keys[i])
+		}
+
+		out[name] = bodies[i]
+	}
+
+	return out, nil
+}
+
+func Apply(store *policy.Store, dataDir string, m *Manifest, lists map[string][]byte) error {
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		return fmt.Errorf("data dir: %w", err)
 	}
@@ -146,7 +252,7 @@ func Apply(store *policy.Store, dataDir string, m *Manifest) error {
 
 	_ = os.RemoveAll(staging)
 
-	if err := write(staging, m); err != nil {
+	if err := write(staging, m, lists); err != nil {
 		_ = os.RemoveAll(staging)
 
 		return err
@@ -193,7 +299,7 @@ func Apply(store *policy.Store, dataDir string, m *Manifest) error {
 	return nil
 }
 
-func write(dir string, m *Manifest) error {
+func write(dir string, m *Manifest, lists map[string][]byte) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
@@ -201,6 +307,25 @@ func write(dir string, m *Manifest) error {
 	for name, profile := range m.Profiles {
 		if err := os.WriteFile(filepath.Join(dir, name+".yaml"),
 			[]byte(profile.Files[0].Text), 0o600); err != nil {
+			return err
+		}
+	}
+
+	if len(m.Lists) == 0 {
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, policy.ListsDir), 0o750); err != nil {
+		return err
+	}
+
+	for name := range m.Lists {
+		body, ok := lists[name]
+		if !ok {
+			return fmt.Errorf("list %s: body is missing", name)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, policy.ListsDir, name+".txt"), body, 0o600); err != nil {
 			return err
 		}
 	}
@@ -239,6 +364,7 @@ func (a *Applied) set(hash string, rev int, apply string, names []string) {
 func Watch(
 	ctx context.Context,
 	nc *nats.Conn,
+	blobs BlobSource,
 	store *policy.Store,
 	dataDir string,
 	level *slog.LevelVar,
@@ -267,10 +393,30 @@ func Watch(
 	go func() {
 		defer watcher.Stop()
 
+		// A generation whose static lists could not be read is tried again: the bodies are in
+		// the internal Redis before the manifest is, so a miss is Redis being away for a while.
+		var (
+			pending []byte
+			retry   <-chan time.Time
+		)
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
+
+			case <-retry:
+				retry = nil
+
+				if pending == nil {
+					continue
+				}
+
+				if handle(ctx, pending, blobs, store, dataDir, applied, level, log) {
+					retry = time.After(fetchRetry)
+				} else {
+					pending = nil
+				}
 
 			case entry, ok := <-watcher.Updates():
 				if !ok {
@@ -286,44 +432,75 @@ func Watch(
 					continue
 				}
 
-				m, err := Parse(entry.Value())
-				if err != nil {
-					log.Warn("desired rejected", "error", err.Error())
+				pending, retry = nil, nil
+				raw := entry.Value()
 
-					continue
+				if handle(ctx, raw, blobs, store, dataDir, applied, level, log) {
+					pending = raw
+					retry = time.After(fetchRetry)
 				}
-
-				hash, rev, apply, names := applied.Snapshot()
-
-				if apply == ApplyOK && hash == m.ConfigHash && rev == m.Rev {
-					continue
-				}
-
-				if err := Apply(store, dataDir, m); err != nil {
-					log.Error("desired apply failed",
-						"rev", m.Rev,
-						"hash", m.ConfigHash,
-						"error", err.Error(),
-					)
-					applied.set(hash, rev, ApplyFailed, names)
-
-					continue
-				}
-
-				applied.set(m.ConfigHash, m.Rev, ApplyOK, m.Names())
-
-				m.Settings.apply(level, log)
-
-				log.Info("desired applied",
-					"rev", m.Rev,
-					"hash", m.ConfigHash,
-					"profiles", m.Names(),
-				)
 			}
 		}
 	}()
 
 	return applied, nil
+}
+
+func handle(
+	ctx context.Context,
+	raw []byte,
+	blobs BlobSource,
+	store *policy.Store,
+	dataDir string,
+	applied *Applied,
+	level *slog.LevelVar,
+	log *slog.Logger,
+) (retry bool) {
+	m, err := Parse(raw)
+	if err != nil {
+		log.Warn("desired rejected", "error", err.Error())
+
+		return false
+	}
+
+	hash, rev, apply, names := applied.Snapshot()
+
+	if apply == ApplyOK && hash == m.ConfigHash && rev == m.Rev {
+		return false
+	}
+
+	lists, err := FetchLists(ctx, blobs, m)
+	if err != nil {
+		log.Error("desired lists failed",
+			"rev", m.Rev, "retry_in", fetchRetry.String(), "error", err.Error())
+		applied.set(hash, rev, ApplyFailed, names)
+
+		return blobs != nil
+	}
+
+	if err := Apply(store, dataDir, m, lists); err != nil {
+		log.Error("desired apply failed",
+			"rev", m.Rev,
+			"hash", m.ConfigHash,
+			"error", err.Error(),
+		)
+		applied.set(hash, rev, ApplyFailed, names)
+
+		return false
+	}
+
+	applied.set(m.ConfigHash, m.Rev, ApplyOK, m.Names())
+
+	m.Settings.apply(level, log)
+
+	log.Info("desired applied",
+		"rev", m.Rev,
+		"hash", m.ConfigHash,
+		"profiles", m.Names(),
+		"lists", len(m.Lists),
+	)
+
+	return false
 }
 
 func Bootstrap(store *policy.Store, dataDir string, log *slog.Logger) bool {

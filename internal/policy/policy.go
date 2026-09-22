@@ -101,6 +101,8 @@ type Profile struct {
 	Rules      []Rule
 }
 
+// Datasets names the dynamic lists the conditions look values up in: the mirror keeps them. A
+// static list comes with the generation and is not mirrored.
 func (p *Profile) Datasets() []string {
 	seen := map[string]bool{}
 
@@ -108,7 +110,7 @@ func (p *Profile) Datasets() []string {
 
 	for _, name := range sortedKeys(p.Conditions) {
 		for _, cl := range p.Conditions[name].Clauses {
-			if cl.Dataset != "" && !seen[cl.Dataset] {
+			if cl.Dataset != "" && !cl.Static && !seen[cl.Dataset] {
 				seen[cl.Dataset] = true
 				out = append(out, cl.Dataset)
 			}
@@ -716,6 +718,10 @@ func LoadDir(dir string) (map[string]*Profile, error) {
 		}
 
 		out[name] = p
+	}
+
+	if err := loadStatic(dir, out); err != nil {
+		return nil, err
 	}
 
 	return out, nil
