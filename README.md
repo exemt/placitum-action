@@ -2,24 +2,21 @@
 
 English · [Русский](README.ru.md)
 
-A pure sender of the action channel. It checks nothing, blocks nobody and has no verdict except
-`allow`: it looks at the route and tells its neighbours what to do. It can soften `modsec` on a
-trusted path, tell captcha that a client loads static files, signal to let a service request through,
-or signal the module to add or remove score on the route (`do: score`), mark the record, or override
-the log and archive. What to say can depend on the request: a profile has **conditions**,
-comparisons of request values with datasets and text, and every rule runs always, if a condition
-holds, or unless it holds.
+The action inspector sends requests to other inspectors and to the module. It matches the route
+and the request against a profile and tells its neighbours what to do: soften `modsec` on a trusted
+path, tell captcha that a client loads static files, let a service request through, add or remove
+score on the route (`do: score`), mark the record, or override the log and archive. A profile has
+conditions, comparisons of request values with datasets and text. A rule runs always, when a
+condition holds, or when it does not.
 
-Two properties set it apart from checking inspectors:
+Its answer is always `allow`. Score on the route moves through a `score` request, which the module
+executes. When the inspector itself fails (a broken message, an unsupported schema version,
+overload, a panic, an object the buffer did not return), it answers `verdict: error` with an
+`ACTION_*` code, so the failure shows in the audit. The wave still completes, because the inspector
+is passive.
 
-- **No verdict except `allow`.** It checks nothing and adds nothing to the score; it moves score on
-  the route with a `score` request that the module executes. Its own failures (a broken message, an
-  unsupported schema version, overload, a panic, an object the buffer did not return) are
-  `verdict: error` with an `ACTION_*` code, so a failing process does not look healthy. An error of
-  a passive inspector does not break the wave.
-- **It runs on an earlier wave than its receivers.** Neighbours on the same wave do not see its
-  actions, so an inspector that should hear `action` must be on a later wave. Actions are sent only
-  in the request phase; other phases get `allow` without actions (`ACTION_IDLE`).
+Put it on an earlier wave than its receivers. Neighbours on the same wave do not see its requests.
+Requests go out in the request phase only; other phases get `allow` with `ACTION_IDLE`.
 
 ## Profiles
 
@@ -98,7 +95,7 @@ works. Loading repeats the module's validation: an unknown verb, an axis that do
 numbers out of range, a bad code, a recipient on a score or dataset action, a reference to an
 undeclared condition, or `if` and `unless` together reject the whole profile.
 
-An action can also be a **write to a live dataset**: `list` and `ttl` (plus `write` and `code`),
+An action can also be a write to a live dataset: `list` and `ttl` (plus `write` and `code`),
 without `to` and `do`. The subject goes to the active dataset as a keeper event
 `waf.sets.<set>.event`, and from then on the local layer on the node or the address inspector cuts
 it off before the bus. `write` takes the same four kinds as every sender: `addr` is the client
