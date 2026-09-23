@@ -2,6 +2,7 @@ package livelist
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -96,6 +97,7 @@ type frame struct {
 	Hash    string `json:"hash"`
 	Key     string `json:"key"`
 	Package string `json:"package"`
+	Inline  string `json:"inline"`
 	Object  string `json:"object"`
 	Count   int    `json:"count"`
 }
@@ -478,6 +480,21 @@ func (m *Mirror) onFrame(st *set, f frame) {
 			m.verify(st, f.Hash, f.Op)
 		}
 	default:
+		/*
+		 * A package one step ahead rides inside the frame: it is applied
+		 * without a read from Redis. Anything further behind, and a frame
+		 * that cannot be decoded, is read from Redis by key as before.
+		 */
+		if f.Op == opDiff && f.Inline != "" && f.Seq == mySeq+1 {
+			if data, err := base64.StdEncoding.DecodeString(f.Inline); err == nil {
+				m.applyPackage(st, data, f.Seq)
+
+				return
+			}
+
+			m.log.Warn("inline package is not base64, reading it from redis", "set", st.name, "seq", f.Seq)
+		}
+
 		m.catchUp(st, f.Seq, f.Hash)
 	}
 }
