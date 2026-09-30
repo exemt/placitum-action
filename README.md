@@ -30,7 +30,7 @@ into the `WAF_DESIRED` KV under `policy/action`. The inspector unpacks the gener
 loader to it; a broken generation is not applied and shows as `apply_failed` in the presence frame.
 
 ```yaml
-mode: enforce            # printed by the controller; whether the inspector runs is decided by the route
+mode: enforce            # printed by the controller; off answers allow with ACTION_PROFILE_OFF and sends nothing
 conditions:              # named conditions; rules reference them by name
   - name: trusted_key
     all:                 # lines joined with AND: the condition holds when every line matches
@@ -91,9 +91,12 @@ rules:
 Rules accumulate and none is terminal: every matching rule fires, actions add up in the order of the
 rules, and the module keeps the limit (`waf_actions_max`). An empty `match` matches every request of
 the profile, since the route already selected the profile; a rule without `if` or `unless` always
-works. Loading repeats the module's validation: an unknown verb, an axis that does not fit the verb,
-numbers out of range, a bad code, a recipient on a score or dataset action, a reference to an
-undeclared condition, or `if` and `unless` together reject the whole profile.
+works. A rule with `on: overload` and `at` (25–100) fires on the inspector's own queue instead of
+the request: once it is `at` percent full, or without `at` only when the request is dropped; such a
+rule takes no `match`, `if` or `unless`. Loading repeats the module's validation: an unknown verb,
+an axis that does not fit the verb, numbers out of range, a bad code, a recipient on a score or
+dataset action, a reference to an undeclared condition, or `if` and `unless` together reject the
+whole profile.
 
 An action can also be a write to a live dataset: `list` and `ttl` (plus `write` and `code`),
 without `to` and `do`. The subject goes to the active dataset as a keeper event
@@ -102,13 +105,16 @@ it off before the bus. `write` takes the same four kinds as every sender: `addr`
 address (the default), `net` the effective announcement, `net_all` every announcement covering the
 address, including wide foreign ones, and `asn` the whole autonomous system. The batch goes to
 keeper in one frame with one expiry and one reason (`ACTION_LIST` without `code`): all or nothing.
-For `net`, `net_all` and `asn` the inspector asks the network directory over gRPC (`WAF_ACTION_GEO_ADDR`)
-synchronously, within the message budget. If the network directory is needed and silent, the answer is
-`verdict: error` with `ACTION_GEO_UNAVAILABLE`, the route's `waf_exception` chooses the outcome, and
-address writes of the same request still go out. A write fires on every matching request and
-extends the expiry: the inspector keeps no memory of what it already wrote, so filter repeats with a
-dataset or a condition in front. The controller allows writes only to active datasets of the space,
-and `net`, `net_all` and `asn` only to address datasets.
+
+For `net`, `net_all` and `asn` the inspector asks the network directory over gRPC
+(`WAF_ACTION_GEO_ADDR`) synchronously, within the message budget. If the network directory is needed
+and silent, the answer is `verdict: error` with `ACTION_GEO_UNAVAILABLE`, the route's
+`waf_exception` chooses the outcome, and address writes of the same request still go out.
+
+A write fires on every matching request and extends the expiry: the inspector keeps no memory of
+what it already wrote, so filter repeats with a dataset or a condition in front. The controller
+allows writes only to active datasets of the space, and `net`, `net_all` and `asn` only to address
+datasets.
 
 ### Conditions
 
@@ -117,13 +123,14 @@ inspector evaluates it and can also compare with text. Condition lines combine w
 every line matches) or OR (`any`: at least one), exactly one of the two keys. A line can also
 reference another condition of the profile (`cond: <name>`, `op: is | is_not`), so AND inside OR
 and any depth are built from flat named conditions. Forward references are fine; self references
-and cycles are not, and a cycle rejects the profile at load time. Evaluation is lazy: AND stops at
-the first false line, OR at the first true one, and every condition is evaluated at most once per
-request however many references it has. Matching works as in the module: `in` and `eq` hold when at
-least one value matches, `not_in` and `ne` when none does. An empty value is simply "not in the
-dataset": a missing cookie is not among the trusted ones either, so `not_in` on it holds. A dataset
-the mirror has not received yet and an object the route does not capture behave the same way:
-missing data never turns into a match.
+and cycles are not, and a cycle rejects the profile at load time.
+
+Evaluation is lazy: AND stops at the first false line, OR at the first true one, and every condition
+is evaluated at most once per request however many references it has. Matching works as in the
+module: `in` and `eq` hold when at least one value matches, `not_in` and `ne` when none does. An
+empty value is simply "not in the dataset": a missing cookie is not among the trusted ones either,
+so `not_in` on it holds. A dataset the mirror has not received yet and an object the route does not
+capture behave the same way: missing data never turns into a match.
 
 A profile rolled out by the controller keeps one line per condition: in the panel, AND and OR are
 groups in a rule's When. The controller prints those groups as conditions of their own, `rule-N` for
@@ -175,7 +182,7 @@ zero). Only a receiver with an acceptance rule for this sender by name applies t
 | --- | --- | --- |
 | `NATS_URL` | `nats://127.0.0.1:4222` | bus; a comma-separated list |
 | `REDIS_URL` | `url` from `inspector.conf` | buffer: headers and query string for conditions. Empty means such objects are unavailable, with a warning at start |
-| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it, and the bodies of static lists come from it. Empty falls back to the buffer with `internal redis falls back to the buffer` in the log; with both empty datasets stay empty |
+| `REDIS_INTERNAL_URL` | `internal` from `inspector.conf` | internal Redis: the dataset mirror reads keeper packages and snapshots from it, and the bodies of static lists come from it. Empty falls back to the buffer with `internal redis falls back to the exchange` in the log; with both empty datasets stay empty |
 | `WAF_ACTION_SUBJECT` | `waf.req.action` | subscription |
 | `WAF_ACTION_NAME` | `action` | name in the inspector registry |
 | `WAF_ACTION_QUEUE` | the name | NATS queue group |
